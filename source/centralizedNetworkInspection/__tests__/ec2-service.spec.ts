@@ -45,36 +45,24 @@ const mockDescribeRouteTablesPromise = jest.fn().mockImplementation(() => {
   });
 });
 
-jest.mock('aws-sdk', () => {
+jest.mock('@aws-sdk/client-ec2', () => {
   return {
     __esModule: true,
-    EC2: jest.fn().mockReturnValue({
-      describeRouteTables: jest.fn().mockImplementation(() => {
-        return {
-          promise: mockDescribeRouteTablesPromise,
-        };
-      }),
-      createRoute: jest.fn().mockImplementation(() => {
-        return {
-          promise: jest.fn().mockImplementation(() => {
-            return Promise.resolve({});
-          }),
-        };
-      }),
-      deleteRoute: jest.fn().mockImplementation(() => {
-        return {
-          promise: jest.fn().mockImplementation(() => {
-            return Promise.resolve({});
-          }),
-        };
-      }),
-      modifyTransitGatewayVpcAttachment: jest.fn().mockImplementation(() => {
-        return {
-          promise: jest.fn().mockImplementation(() => {
-            return Promise.resolve({});
-          }),
-        };
-      }),
+    EC2: jest.fn().mockImplementation(() => {
+      return {
+        describeRouteTables: jest.fn().mockImplementation(() => {
+          return mockDescribeRouteTablesPromise();
+        }),
+        createRoute: jest.fn().mockImplementation(() => {
+          return Promise.resolve({});
+        }),
+        deleteRoute: jest.fn().mockImplementation(() => {
+          return Promise.resolve({});
+        }),
+        modifyTransitGatewayVpcAttachment: jest.fn().mockImplementation(() => {
+          return Promise.resolve({});
+        }),
+      };
     }),
   };
 });

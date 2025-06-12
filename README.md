@@ -31,7 +31,7 @@ Solution for Centralized Network Inspection on AWS.
 
 ## Prerequisites for Customization
 
-* Node.js>16
+* Node.js>22
 
 <a name="build"></a>
 
@@ -40,21 +40,23 @@ Solution for Centralized Network Inspection on AWS.
 Build the CDK code
 
 ```
-cd source/
+cd <rootDir>/source
+npm i
 npm run build
 ```
 
 Build the Centralized Network Inspection Solution CodeBuild source code
 
 ```
-cd source/centralizedNetworkInspection
+cd <rootDir>/source/centralizedNetworkInspection
+npm i
 tsc 
 ```
 
 Build the templates for custom deployments
 
 ```
-cd deployments/
+cd <rootDir>/deployment
 chmod +x ./build-s3-dist.sh
 ./build-s3-dist.sh [SOLUTION_DIST_BUCKET] centralized-network-inspection [VERSION_ID]
 ```
@@ -80,8 +82,8 @@ Follow the steps for deploying your custom version of the solution.
 - Create the distribution files using the script provided in the build section above.
 - Create the S3 Key in the bucket centralized-network-inspection/[VERSION_ID]/
 - Create the S3 Key in the bucket centralized-network-inspection/latest/
-- Copy the file ./deployment/regional-s3-assets/centralized-network-inspection.zip to the location s3://[BUCKET_NAME]-[REGION]/centralized-network-inspection/[VERSION_ID]/
-- Copy the file ./deployment/regional-s3-assets/centralized-network-inspection-configuration.zip to the location s3://[BUCKET_NAME]-[REGION]/centralized-network-inspection/latest/
+- Copy the files ./deployment/regional-s3-assets/* to the location s3://[BUCKET_NAME]-[REGION]/centralized-network-inspection/[VERSION_ID]/
+- Copy the files ./deployment/regional-s3-assets/* to the location s3://[BUCKET_NAME]-[REGION]/centralized-network-inspection/latest/
 
 Once the above steps are completed, use the file ./deployment/global-s3-assets/centralized-network-inspection-on-aws.template to create a stack in CloudFormation.
 
@@ -98,6 +100,7 @@ File Structure
 
 <pre>
 |-deployment/
+  |cdk-solution-helper/                  [ helper function for converting CDK output to a format compatible with the AWS Solutions pipelines.]
   |build-s3-dist.sh/                     [ Build script for create the distribution for the solution.]
 |-source/
   |-bin/

@@ -5,27 +5,28 @@
 import { MetricsManager } from '../lib/common/send-metrics';
 
 jest.mock(
-  'aws-sdk',
+  '@aws-sdk/client-ssm',
   () => {
     return {
       __esModule: true,
-      SSM: jest.fn().mockReturnValue({
-        getParameter: jest.fn().mockImplementation(data => {
-          expect(data).toStrictEqual({ Name: 'centralized-network-inspection-solution-uuid-asds' });
-          if ('centralized-network-inspection-solution-uuid-asds' === data['Name']) {
-            return {
-              promise: jest.fn().mockReturnValue({
+      SSM: jest.fn().mockImplementation(() => {
+        return {
+          getParameter: jest.fn().mockImplementation(data => {
+            expect(data).toStrictEqual({ Name: 'centralized-network-inspection-solution-uuid-asds' });
+            if ('centralized-network-inspection-solution-uuid-asds' === data['Name']) {
+              return Promise.resolve({
                 Parameter: {
                   Value: '5d358dfa-bc71-4a48-a00c-0931e8ec1456',
                 },
-              }),
-            };
-          } else {
-            return {
-              promise: jest.fn().mockReturnValue({}),
-            };
-          }
-        }),
+              });
+            } else {
+              return Promise.resolve({});
+            }
+          }),
+          putParameter: jest.fn().mockImplementation(() => {
+            return Promise.resolve({});
+          }),
+        };
       }),
     };
   },
@@ -51,9 +52,10 @@ jest.mock(
     return {
       __esModule: true,
       post: jest.fn().mockImplementation(() => {
-        return {
-          promise: jest.fn().mockReturnValue({}),
-        };
+        return Promise.resolve({
+          status: 200,
+          data: 'Success'
+        });
       }),
     };
   },

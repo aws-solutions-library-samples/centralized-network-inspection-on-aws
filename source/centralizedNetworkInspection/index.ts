@@ -13,6 +13,7 @@ import { EnvironmentProps, NetworkFirewallManager } from './lib/network-firewall
 import { Ec2EnvironmentProps, Ec2Manager } from './lib/ec2-manager';
 import { ConfigReader, ConfigPath } from './lib/common/configReader/config-reader';
 import { Logger, LOG_LEVEL } from './lib/common/logger';
+import { ApplianceModeSupportValue } from '@aws-sdk/client-ec2';
 
 async function firewallManager() {
   // declare environment variables
@@ -35,7 +36,7 @@ async function firewallManager() {
   const applianceMode = process.env.TRANSIT_GATEWAY_ATTACHMENT_APPLIANCE_MODE
     ? process.env.TRANSIT_GATEWAY_ATTACHMENT_APPLIANCE_MODE
     : 'enable';
-  Ec2Manager.updateTransitGatewayAttachementApplianceMode(transitGatewayAttachmentId, applianceMode);
+  Ec2Manager.updateTransitGatewayAttachementApplianceMode(transitGatewayAttachmentId, applianceMode as ApplianceModeSupportValue);
 
   let ec2EnvProps: Ec2EnvironmentProps[] = [
     {

@@ -3,33 +3,75 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ConfigurationOptions, NetworkFirewall } from 'aws-sdk';
-import { AwsClientConfig, Count } from './awsClientConfig';
+import {
+  NetworkFirewallClient,
+  CreateFirewallCommand,
+  CreateFirewallPolicyCommand,
+  CreateRuleGroupCommand,
+  DescribeFirewallCommand,
+  DescribeFirewallPolicyCommand,
+  DescribeRuleGroupCommand,
+  AssociateFirewallPolicyCommand,
+  TagResourceCommand,
+  UpdateFirewallPolicyCommand,
+  UpdateRuleGroupCommand,
+  UpdateFirewallDescriptionCommand,
+  UpdateFirewallDeleteProtectionCommand,
+  UpdateFirewallPolicyChangeProtectionCommand,
+  UpdateSubnetChangeProtectionCommand,
+  DescribeLoggingConfigurationCommand,
+  UpdateLoggingConfigurationCommand,
+  DeleteRuleGroupCommand,
+  CreateFirewallRequest,
+  CreateFirewallPolicyRequest,
+  CreateRuleGroupRequest,
+  AssociateFirewallPolicyRequest,
+  TagResourceRequest,
+  UpdateFirewallPolicyRequest,
+  UpdateRuleGroupRequest,
+  UpdateFirewallDescriptionRequest,
+  UpdateFirewallDeleteProtectionRequest,
+  UpdateFirewallPolicyChangeProtectionRequest,
+  UpdateSubnetChangeProtectionRequest,
+  LoggingConfiguration,
+  DescribeFirewallCommandOutput,
+  DescribeFirewallPolicyCommandOutput,
+  DescribeRuleGroupCommandOutput,
+  RuleGroupType,
+  UpdateLoggingConfigurationCommandInput,
+  DescribeLoggingConfigurationCommandOutput
+} from '@aws-sdk/client-network-firewall';
+import { AwsClientConfig } from './awsClientConfig';
 import { LOG_LEVEL, Logger } from '../common/logger';
+import { AwsErrorFormatter } from '../common/aws-error-formatter';
+
+// Define the retry count for API calls
+const MIN_RETRY = 3;
+// Maximum number of retries for update token issues
+const MAX_TOKEN_RETRIES = 5;
 
 /**
  * Service class which handles all the Network Firewall API integrations.
  */
 export class NetworkFirewallService {
-  private NetworkFirewallInstance: NetworkFirewall;
-  config: ConfigurationOptions;
+  private networkFirewallClient: NetworkFirewallClient;
   count: number;
 
   constructor() {
-    this.config = new AwsClientConfig().getRetryConfigurationOptions();
+    const config = new AwsClientConfig().getRetryConfigurationOptions();
     this.count = 0;
-    this.NetworkFirewallInstance = new NetworkFirewall(this.config);
+    this.networkFirewallClient = new NetworkFirewallClient(config);
   }
-
+  
   /** Creates Firewall configurations returns an void/undefined if the firewall doesn't not exist.  */
-  async createFirewall(props: NetworkFirewall.CreateFirewallRequest) {
+  async createFirewall(props: CreateFirewallRequest) {
     Logger.log(LOG_LEVEL.INFO, 'Creating Firewall');
-    Logger.log(LOG_LEVEL.INFO, `Print Props: ${JSON.stringify(props)}`);
     try {
-      const response = await this.NetworkFirewallInstance.createFirewall(props).promise();
+      const command = new CreateFirewallCommand(props);
+      const response = await this.networkFirewallClient.send(command);
       return Promise.resolve(response);
     } catch (e: any) {
-      if (e.code === 'ResourceNotFoundException') {
+      if (e.name === 'ResourceNotFoundException') {
         Logger.log(LOG_LEVEL.INFO, 'Firewall Not Found');
         return;
       }
@@ -39,32 +81,33 @@ export class NetworkFirewallService {
 
   /** Creates a firewall policy and returns the response object received
    *  from the Network Firewall API. */
-  async createFirewallPolicy(props: NetworkFirewall.CreateFirewallPolicyRequest) {
+  async createFirewallPolicy(props: CreateFirewallPolicyRequest) {
     Logger.log(LOG_LEVEL.INFO, 'Creating Firewall Policy');
-    Logger.log(LOG_LEVEL.INFO, `Print Props: ${JSON.stringify(props)}`);
-    return this.NetworkFirewallInstance.createFirewallPolicy(props).promise();
+    const command = new CreateFirewallPolicyCommand(props);
+    return this.networkFirewallClient.send(command);
   }
 
   /** Creates a rule group and returns the response object received from the Network Firewall API */
-  async createRuleGroup(props: NetworkFirewall.CreateRuleGroupRequest) {
-    Logger.log(LOG_LEVEL.INFO, 'Creating Firewall Rule Group');
-    Logger.log(LOG_LEVEL.INFO, `Print createRuleGroup Props`);
-    Logger.log(LOG_LEVEL.INFO, props);
-    return this.NetworkFirewallInstance.createRuleGroup(props).promise();
+  async createRuleGroup(props: CreateRuleGroupRequest) {
+    Logger.log(LOG_LEVEL.INFO, 'Create Rule Group');
+    Logger.log(LOG_LEVEL.DEBUG, props);
+    const command = new CreateRuleGroupCommand(props);
+    return this.networkFirewallClient.send(command);
   }
 
   /** Describes the firewall based on the input param firewallName, return void/undefined if there is not firewall with the firewall Name defined. */
-  async describeFirewall(firewallName: string): Promise<NetworkFirewall.Types.DescribeFirewallResponse | void> {
+  async describeFirewall(firewallName: string): Promise<DescribeFirewallCommandOutput | void> {
     Logger.log(LOG_LEVEL.INFO, 'Describe Firewall');
     Logger.log(LOG_LEVEL.INFO, `Print Firewall Name: ${firewallName}`);
     try {
-      const response = await this.NetworkFirewallInstance.describeFirewall({
+      const command = new DescribeFirewallCommand({
         FirewallName: firewallName,
-      }).promise();
+      });
+      const response = await this.networkFirewallClient.send(command);
       return Promise.resolve(response);
     } catch (error: any) {
-      Logger.log(LOG_LEVEL.INFO, JSON.stringify(error));
-      if (error.code === 'ResourceNotFoundException') {
+      Logger.log(LOG_LEVEL.INFO, 'Firewall error:', AwsErrorFormatter.format(error));
+      if (error.name === 'ResourceNotFoundException') {
         Logger.log(LOG_LEVEL.INFO, 'Firewall Not Found.');
         return Promise.resolve();
       }
@@ -75,15 +118,16 @@ export class NetworkFirewallService {
   /** Describes the firewall policy and returns void/undefined if there is no firewall policy with the Name and/or Arn defined */
   async describeFirewallPolicy(
     firewallPolicyName: string
-  ): Promise<NetworkFirewall.Types.DescribeFirewallPolicyResponse | void> {
+  ): Promise<DescribeFirewallPolicyCommandOutput | void> {
     try {
-      const response = await this.NetworkFirewallInstance.describeFirewallPolicy({
+      const command = new DescribeFirewallPolicyCommand({
         FirewallPolicyName: firewallPolicyName,
-      }).promise();
+      });
+      const response = await this.networkFirewallClient.send(command);
       return Promise.resolve(response);
     } catch (error: any) {
-      Logger.log(LOG_LEVEL.INFO, JSON.stringify(error));
-      if (error.code === 'ResourceNotFoundException') {
+      Logger.log(LOG_LEVEL.INFO, 'Firewall Policy error:', AwsErrorFormatter.format(error));
+      if (error.name === 'ResourceNotFoundException') {
         Logger.log(LOG_LEVEL.INFO, 'Firewall Policy Not Found.');
         return Promise.resolve();
       }
@@ -92,42 +136,44 @@ export class NetworkFirewallService {
   }
 
   /** Describes the rule group and returns an rule response object from the api, return void/undefined in case none is found, the
-   *  method will retry API calls for a maximum of Count.minRetry value.
+   *  method will retry API calls for a maximum of MIN_RETRY value.
    */
   async describeRuleGroup(
     RuleGroupName: string,
     Type: string
-  ): Promise<NetworkFirewall.DescribeRuleGroupResponse | void> {
+  ): Promise<DescribeRuleGroupCommandOutput | void> {
     // reset the count to 0 in case anyother call has been made
     this.count = 0;
     do {
       try {
         Logger.log(LOG_LEVEL.INFO, `Describing Rule Group: ${RuleGroupName} | Type: ${Type}`);
-        const response = await this.NetworkFirewallInstance.describeRuleGroup({
+        const command = new DescribeRuleGroupCommand({
           RuleGroupName: RuleGroupName,
-          Type: Type,
-        }).promise();
+          Type: Type as RuleGroupType,
+        });
+        const response = await this.networkFirewallClient.send(command);
         return Promise.resolve(response);
       } catch (error: any) {
-        Logger.log(LOG_LEVEL.INFO, JSON.stringify(error));
-        if (error.message === 'ThrottlingException') {
+        Logger.log(LOG_LEVEL.INFO, 'Rule Group error:', AwsErrorFormatter.format(error));
+        if (error.name === 'ThrottlingException') {
           this.count++; //increment the count
           Logger.log(LOG_LEVEL.INFO, `Caught throttling exception, trying count: ${this.count}`);
         }
-        if (error.code === 'ResourceNotFoundException') {
+        if (error.name === 'ResourceNotFoundException') {
           Logger.log(LOG_LEVEL.INFO, 'Rule Group Not Found.');
           return Promise.resolve();
         }
       }
-    } while (this.count < Count.minRetry);
+    } while (this.count < MIN_RETRY);
     Logger.log(LOG_LEVEL.ERROR, `Unable to retrieve rule group and exceeded the retry count`);
     return Promise.reject({ message: 'Unable to resolve request and completed retries.' });
   }
 
   /** Associates the firewall policy to the firewall. */
-  async associateFirewallPolicy(request: NetworkFirewall.AssociateFirewallPolicyRequest) {
+  async associateFirewallPolicy(request: AssociateFirewallPolicyRequest) {
     try {
-      return this.NetworkFirewallInstance.associateFirewallPolicy(request).promise();
+      const command = new AssociateFirewallPolicyCommand(request);
+      return this.networkFirewallClient.send(command);
     } catch (error) {
       Logger.log(LOG_LEVEL.DEBUG, error);
       return Promise.reject(error);
@@ -135,9 +181,10 @@ export class NetworkFirewallService {
   }
 
   /** associate tags to the firewall resource. */
-  async tagResource(request: NetworkFirewall.Types.TagResourceRequest) {
+  async tagResource(request: TagResourceRequest) {
     try {
-      return this.NetworkFirewallInstance.tagResource(request).promise();
+      const command = new TagResourceCommand(request);
+      return this.networkFirewallClient.send(command);
     } catch (error) {
       Logger.log(LOG_LEVEL.ERROR, `Failed to update tags for the firewall ${error}`);
       // returning resolve to avoid pipeline failure due to tag change failure.
@@ -145,57 +192,115 @@ export class NetworkFirewallService {
     }
   }
 
-  /** Updates the firewall policy and will override any configurations done to  the firewall policy in the AWS console. Method will attempt multiple updates to the
-   * firewall policy until successful.
+  /** Updates the firewall policy and will override any configurations done to the firewall policy in the AWS console. 
+   * Method will attempt multiple updates until successful or maximum retries are reached.
    */
-  async updateFirewallPolicy(request: NetworkFirewall.Types.UpdateFirewallPolicyRequest) {
+  async updateFirewallPolicy(request: UpdateFirewallPolicyRequest) {
+    let tokenRetryCount = 0;
     do {
       try {
-        return await this.NetworkFirewallInstance.updateFirewallPolicy(request).promise();
+        const command = new UpdateFirewallPolicyCommand(request);
+        const result = await this.networkFirewallClient.send(command);
+        
+        request.UpdateToken = '';
+        return result;
       } catch (error: any) {
-        if (error['message'] === 'Update token is invalid.') {
-          const describeResponse = await this.NetworkFirewallInstance.describeFirewallPolicy({
-            FirewallPolicyName: request.FirewallPolicyName,
-          }).promise();
-          request.UpdateToken = describeResponse.UpdateToken;
-        } else {
+        const isInvalidTokenError = (error.message === 'Update token is invalid.');
+        
+        if (!isInvalidTokenError) {
           Logger.log(LOG_LEVEL.DEBUG, error);
           return Promise.reject(error);
         }
+        
+        tokenRetryCount++;
+        const hasExceededRetryLimit = tokenRetryCount >= MAX_TOKEN_RETRIES;
+        
+        if (hasExceededRetryLimit) {
+          const errorMessage = 'Maximum token retry attempts exceeded for firewall policy update';
+          Logger.log(LOG_LEVEL.ERROR, `${errorMessage} (${MAX_TOKEN_RETRIES})`);
+          return Promise.reject(new Error(errorMessage));
+        }
+        
+        const describeCommand = new DescribeFirewallPolicyCommand({
+          FirewallPolicyName: request.FirewallPolicyName,
+        });
+        const describeResponse = await this.networkFirewallClient.send(describeCommand);
+        const hasValidToken = describeResponse && describeResponse.UpdateToken;
+        
+        if (hasValidToken) {
+          request.UpdateToken = describeResponse.UpdateToken;
+        } else {
+          Logger.log(LOG_LEVEL.ERROR, `Failed to get valid update token for firewall policy`);
+          return Promise.reject(new Error('Failed to get valid update token for firewall policy'));
+        }
       }
     } while (request.UpdateToken);
+    
     return Promise.resolve();
   }
 
-  async updateRuleGroup(updateRuleGroupRequest: NetworkFirewall.Types.UpdateRuleGroupRequest) {
+  /**
+   * Update a rule group with retry protection against token validation errors.
+   * @param updateRuleGroupRequest UpdateRuleGroupRequest
+   */
+  async updateRuleGroup(updateRuleGroupRequest: UpdateRuleGroupRequest) {
     let updateResponse;
+    let tokenRetryCount = 0;
+    
+    // Loop until token is cleared or max retries reached
     do {
       try {
-        updateResponse = await this.NetworkFirewallInstance.updateRuleGroup(updateRuleGroupRequest).promise();
+        // Attempt the update operation
+        const command = new UpdateRuleGroupCommand(updateRuleGroupRequest);
+        updateResponse = await this.networkFirewallClient.send(command);
         updateRuleGroupRequest.UpdateToken = '';
       } catch (error: any) {
-        if (error['message'] == 'Update token is invalid.') {
-          const describeResponse = await this.NetworkFirewallInstance.describeRuleGroup({
-            RuleGroupArn: updateRuleGroupRequest.RuleGroupArn,
-          }).promise();
+        const isInvalidTokenError = error.message === 'Update token is invalid.';
+        
+        if (!isInvalidTokenError) {
+          Logger.log(
+            LOG_LEVEL.INFO, 
+            `Error while trying to update the rule group ${updateRuleGroupRequest}: ${error}`
+          );
+          return Promise.reject(error);
+        }
+        
+        tokenRetryCount++;
+        const hasExceededRetryLimit = tokenRetryCount >= MAX_TOKEN_RETRIES;
+        
+        if (hasExceededRetryLimit) {
+          const errorMessage = 'Maximum token retry attempts exceeded for rule group update';
+          Logger.log(LOG_LEVEL.ERROR, `${errorMessage} (${MAX_TOKEN_RETRIES})`);
+          return Promise.reject(new Error(errorMessage));
+        }
+        
+        const describeCommand = new DescribeRuleGroupCommand({
+          RuleGroupArn: updateRuleGroupRequest.RuleGroupArn,
+        });
+        const describeResponse = await this.networkFirewallClient.send(describeCommand);
+        const hasValidToken = describeResponse && describeResponse.UpdateToken;
+        
+        if (hasValidToken) {
           updateRuleGroupRequest.UpdateToken = describeResponse.UpdateToken;
         } else {
-          Logger.log(LOG_LEVEL.INFO, `Error while trying to update the rule group ${updateRuleGroupRequest}: ${error}`);
-          return Promise.reject(error);
+          Logger.log(LOG_LEVEL.ERROR, `Failed to get valid update token for rule group`);
+          return Promise.reject(new Error('Failed to get valid update token for rule group'));
         }
       }
     } while (updateRuleGroupRequest.UpdateToken);
+    
     Logger.log(LOG_LEVEL.INFO, `update response ${JSON.stringify(updateResponse)}`);
     return Promise.resolve(updateResponse);
   }
 
   /**
    * Update the firewall description.
-   * @param request NetworkFirewall.Types.UpdateFirewallDescriptionRequest
+   * @param request UpdateFirewallDescriptionRequest
    */
-  async updateFirewallDescription(request: NetworkFirewall.Types.UpdateFirewallDescriptionRequest) {
+  async updateFirewallDescription(request: UpdateFirewallDescriptionRequest) {
     try {
-      return await this.NetworkFirewallInstance.updateFirewallDescription(request).promise();
+      const command = new UpdateFirewallDescriptionCommand(request);
+      return await this.networkFirewallClient.send(command);
     } catch (error) {
       Logger.log(LOG_LEVEL.DEBUG, error);
       return Promise.reject(error);
@@ -203,11 +308,12 @@ export class NetworkFirewallService {
   }
   /**
    * Update the firewall delete protection attribute.
-   * @param request NetworkFirewall.Types.UpdateFirewallDeleteProtectionRequest
+   * @param request UpdateFirewallDeleteProtectionRequest
    */
-  async updateFirewallDeleteProtection(request: NetworkFirewall.Types.UpdateFirewallDeleteProtectionRequest) {
+  async updateFirewallDeleteProtection(request: UpdateFirewallDeleteProtectionRequest) {
     try {
-      return await this.NetworkFirewallInstance.updateFirewallDeleteProtection(request).promise();
+      const command = new UpdateFirewallDeleteProtectionCommand(request);
+      return await this.networkFirewallClient.send(command);
     } catch (error) {
       Logger.log(LOG_LEVEL.DEBUG, error);
       return Promise.reject(error);
@@ -216,13 +322,14 @@ export class NetworkFirewallService {
 
   /**
    * Update the firewall policy change protection attribute.
-   * @param request NetworkFirewall.Types.UpdateFirewallPolicyChangeProtectionRequest
+   * @param request UpdateFirewallPolicyChangeProtectionRequest
    */
   async updateFirewallPolicyChangeProtection(
-    request: NetworkFirewall.Types.UpdateFirewallPolicyChangeProtectionRequest
+    request: UpdateFirewallPolicyChangeProtectionRequest
   ) {
     try {
-      return await this.NetworkFirewallInstance.updateFirewallPolicyChangeProtection(request).promise();
+      const command = new UpdateFirewallPolicyChangeProtectionCommand(request);
+      return await this.networkFirewallClient.send(command);
     } catch (error) {
       Logger.log(LOG_LEVEL.DEBUG, error);
       return Promise.reject(error);
@@ -230,11 +337,12 @@ export class NetworkFirewallService {
   }
   /**
    * Update the subnet change protection attribute.
-   * @param request NetworkFirewall.Types.UpdateSubnetChangeProtectionRequest
+   * @param request UpdateSubnetChangeProtectionRequest
    */
-  async updateSubnetChangeProtection(request: NetworkFirewall.Types.UpdateSubnetChangeProtectionRequest) {
+  async updateSubnetChangeProtection(request: UpdateSubnetChangeProtectionRequest) {
     try {
-      return await this.NetworkFirewallInstance.updateSubnetChangeProtection(request).promise();
+      const command = new UpdateSubnetChangeProtectionCommand(request);
+      return await this.networkFirewallClient.send(command);
     } catch (error) {
       Logger.log(LOG_LEVEL.DEBUG, error);
       return Promise.reject(error);
@@ -243,18 +351,19 @@ export class NetworkFirewallService {
 
   async updateLoggingConfiguration(
     firewallName: string,
-    loggingConfiguration: NetworkFirewall.Types.LoggingConfiguration
+    loggingConfiguration: LoggingConfiguration
   ) {
     Logger.log(LOG_LEVEL.INFO, loggingConfiguration);
-    let describeFirewallLoggingResponse;
+    let describeFirewallLoggingResponse: DescribeLoggingConfigurationCommandOutput;
     try {
-      describeFirewallLoggingResponse = await this.NetworkFirewallInstance.describeLoggingConfiguration({
+      const describeCommand = new DescribeLoggingConfigurationCommand({
         FirewallName: firewallName,
-      }).promise();
+      });
+      describeFirewallLoggingResponse = await this.networkFirewallClient.send(describeCommand);
       Logger.log(LOG_LEVEL.INFO, describeFirewallLoggingResponse);
-      //cleaning up the configuration stack currently in the firewall.
       while (
         describeFirewallLoggingResponse.LoggingConfiguration &&
+        describeFirewallLoggingResponse.LoggingConfiguration.LogDestinationConfigs &&
         describeFirewallLoggingResponse.LoggingConfiguration.LogDestinationConfigs.length > 0
       ) {
         Logger.log(LOG_LEVEL.INFO, describeFirewallLoggingResponse);
@@ -262,16 +371,35 @@ export class NetworkFirewallService {
           describeFirewallLoggingResponse.LoggingConfiguration.LogDestinationConfigs.pop();
         }
 
-        describeFirewallLoggingResponse = await this.NetworkFirewallInstance.updateLoggingConfiguration(
-          describeFirewallLoggingResponse
-        ).promise();
+        const updateInput: UpdateLoggingConfigurationCommandInput = {
+          FirewallName: firewallName,
+          LoggingConfiguration: describeFirewallLoggingResponse.LoggingConfiguration
+        };
+        const updateCommand = new UpdateLoggingConfigurationCommand(updateInput);
+        describeFirewallLoggingResponse = await this.networkFirewallClient.send(updateCommand);
       }
 
-      for (let config of loggingConfiguration.LogDestinationConfigs) {
-        describeFirewallLoggingResponse.LoggingConfiguration?.LogDestinationConfigs.push(config);
-        describeFirewallLoggingResponse = await this.NetworkFirewallInstance.updateLoggingConfiguration(
-          describeFirewallLoggingResponse
-        ).promise();
+      if (loggingConfiguration.LogDestinationConfigs) {
+        for (let config of loggingConfiguration.LogDestinationConfigs) {
+          if (!describeFirewallLoggingResponse.LoggingConfiguration) {
+            describeFirewallLoggingResponse.LoggingConfiguration = {
+              LogDestinationConfigs: []
+            };
+          }
+          
+          if (!describeFirewallLoggingResponse.LoggingConfiguration.LogDestinationConfigs) {
+            describeFirewallLoggingResponse.LoggingConfiguration.LogDestinationConfigs = [];
+          }
+          
+          describeFirewallLoggingResponse.LoggingConfiguration.LogDestinationConfigs.push(config);
+          
+          const updateInput: UpdateLoggingConfigurationCommandInput = {
+            FirewallName: firewallName,
+            LoggingConfiguration: describeFirewallLoggingResponse.LoggingConfiguration
+          };
+          const updateCommand = new UpdateLoggingConfigurationCommand(updateInput);
+          describeFirewallLoggingResponse = await this.networkFirewallClient.send(updateCommand);
+        }
       }
 
       Logger.log(LOG_LEVEL.INFO, describeFirewallLoggingResponse);
@@ -287,14 +415,15 @@ export class NetworkFirewallService {
     let response;
 
     try {
-      response = await this.NetworkFirewallInstance.describeFirewallPolicy({
+      const command = new DescribeFirewallPolicyCommand({
         FirewallPolicyName: firewallPolicyName,
-      }).promise();
+      });
+      response = await this.networkFirewallClient.send(command);
       if (response && response.FirewallPolicy) {
-        response.FirewallPolicy?.StatefulRuleGroupReferences?.forEach(ruleGroup => {
+        response.FirewallPolicy?.StatefulRuleGroupReferences?.forEach((ruleGroup: any) => {
           ruleGroupArns.push(ruleGroup.ResourceArn);
         });
-        response.FirewallPolicy?.StatelessRuleGroupReferences?.forEach(ruleGroup => {
+        response.FirewallPolicy?.StatelessRuleGroupReferences?.forEach((ruleGroup: any) => {
           ruleGroupArns.push(ruleGroup.ResourceArn);
         });
       } else {
@@ -302,17 +431,18 @@ export class NetworkFirewallService {
         return Promise.resolve([]);
       }
       return Promise.resolve(ruleGroupArns);
-    } catch (error) {
-      Logger.log(LOG_LEVEL.INFO, `Error trying to retrieve current rule groups configured ${JSON.stringify(error)}`);
+    } catch (error: any) {
+      Logger.log(LOG_LEVEL.INFO, 'Error trying to retrieve current rule groups:', AwsErrorFormatter.format(error));
       return Promise.resolve([]);
     }
   }
 
   async deleteRuleGroup(ruleGroupArn: string) {
     try {
-      await this.NetworkFirewallInstance.deleteRuleGroup({ RuleGroupArn: ruleGroupArn }).promise();
-    } catch (error) {
-      Logger.log(LOG_LEVEL.INFO, `Unable to delete rule group ${JSON.stringify(error)}`);
+      const command = new DeleteRuleGroupCommand({ RuleGroupArn: ruleGroupArn });
+      await this.networkFirewallClient.send(command);
+    } catch (error: any) {
+      Logger.log(LOG_LEVEL.INFO, 'Unable to delete rule group:', AwsErrorFormatter.format(error));
     }
   }
 }

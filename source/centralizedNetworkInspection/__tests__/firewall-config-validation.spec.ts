@@ -5,16 +5,18 @@
 
 import { FirewallConfigValidation } from '../lib/common/firewall-config-validation';
 
-jest.mock('aws-sdk', () => {
+jest.mock('@aws-sdk/client-network-firewall', () => {
   return {
     __esModule: true,
-    NetworkFirewall: jest.fn().mockReturnValue({
-      createRuleGroup: jest.fn().mockImplementation(() => {
-        //console.log(`Inside rule group mock ${JSON.stringify(data)}` )
-      }),
-      createFirewallPolicy: jest.fn().mockImplementation(() => {
-        //console.log(`Inside firewall policy mock ${JSON.stringify(data)}` )
-      }),
+    NetworkFirewall: jest.fn().mockImplementation(() => {
+      return {
+        createRuleGroup: jest.fn().mockImplementation(() => {
+          return Promise.resolve({});
+        }),
+        createFirewallPolicy: jest.fn().mockImplementation(() => {
+          return Promise.resolve({});
+        }),
+      };
     }),
   };
 });

@@ -4,11 +4,12 @@
   * SPDX-License-Identifier: Apache-2.0
   */
 
-import { App, DefaultStackSynthesizer } from 'aws-cdk-lib';
+import { App, Aspects, DefaultStackSynthesizer } from 'aws-cdk-lib';
 import {
   CentralizedNetworkInspectionStack,
   CentralizedNetworkInspectionStackProps
 } from '../lib/centralized-network-inspection.stack';
+import { CfnGuardSuppressResourceList } from '../utils/appUtils';
 
 const SOLUTION_VERSION = process.env['DIST_VERSION'];
 const SOLUTION_NAME = process.env['SOLUTION_NAME'];
@@ -42,8 +43,15 @@ let centralizedNetworkInspectionStackProps: CentralizedNetworkInspectionStackPro
   description: `(${SOLUTION_ID}) - The AWS CloudFormation template for deployment of the ${SOLUTION_NAME}, Version: ${SOLUTION_VERSION}`
 };
 
-new CentralizedNetworkInspectionStack(
+const stack = new CentralizedNetworkInspectionStack(
   app,
   'centralized-network-inspection-on-aws',
   centralizedNetworkInspectionStackProps
 );
+
+const resourceSuppressions = {
+  'AWS::Lambda::Function': ['LAMBDA_INSIDE_VPC', 'LAMBDA_CONCURRENCY_CHECK'],
+  'AWS::Logs::LogGroup' : ['CW_LOGGROUP_RETENTION_PERIOD_CHECK']
+};
+
+Aspects.of(stack).add(new CfnGuardSuppressResourceList(resourceSuppressions));

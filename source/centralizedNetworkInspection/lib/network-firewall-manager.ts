@@ -2,11 +2,28 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  CreateFirewallCommandInput,
+  CreateFirewallPolicyCommandInput,
+  CreateRuleGroupCommandInput,
+  DescribeFirewallCommandOutput,
+  DescribeRuleGroupCommandOutput,
+  LogDestinationConfig,
+  LogDestinationType,
+  LogType as NetworkFirewallLogType,
+  StatefulRuleGroupReference,
+  StatelessRuleGroupReference,
+  SubnetMapping,
+  SyncState,
+} from '@aws-sdk/client-network-firewall';
 
-import { NetworkFirewall } from 'aws-sdk';
 import { NetworkFirewallService } from './service/network-firewall-service';
 import { ConfigReader } from './common/configReader/config-reader';
-import { Time } from './service/awsClientConfig';
+
+enum Time {
+  Seconds15 = 15000,
+}
+
 import { LOG_LEVEL, Logger } from './common/logger';
 import { StringUtils } from './common/stringUtils';
 
@@ -46,7 +63,7 @@ export class NetworkFirewallManager {
 
   constructor(
     public envProps: EnvironmentProps,
-    public firewallObject: NetworkFirewall.Types.CreateFirewallRequest,
+    public firewallObject: CreateFirewallCommandInput,
     public fileHandler: ConfigReader
   ) {
     this.service = new NetworkFirewallService();
@@ -54,7 +71,7 @@ export class NetworkFirewallManager {
   }
 
   /** get vpc id */
-  getVpcId(): NetworkFirewall.VpcId {
+  getVpcId(): string {
     let vpcId;
     if (this.envProps.vpcId) {
       vpcId = this.envProps.vpcId;
@@ -67,7 +84,7 @@ export class NetworkFirewallManager {
   }
 
   /** get subnet mapping */
-  getSubnetMapping(): NetworkFirewall.SubnetMappings {
+  getSubnetMapping(): Array<SubnetMapping> {
     let subnetIdArray;
     let subnetMappings;
 
@@ -94,7 +111,7 @@ export class NetworkFirewallManager {
   /** Function will create network firewall and wait until the status of the firewall is provisioned before returning the response to the calling
    * function.
    */
-  async createNetworkFirewall(firewallPolicyArn: string): Promise<NetworkFirewall.SyncStates | void> {
+  async createNetworkFirewall(firewallPolicyArn: string): Promise<Record<string, SyncState> | void> {
     this.firewallObject['VpcId'] = this.getVpcId() || '';
     this.firewallObject['SubnetMappings'] = this.getSubnetMapping();
     this.firewallObject.FirewallPolicyArn = firewallPolicyArn;
@@ -109,23 +126,23 @@ export class NetworkFirewallManager {
   /** Function will check if firewall exists, if not will start the process to create rule groups, create the firewall policy
    * and then create the firewall. If firewall exists the configs are updated starting with rule groups, firewall policy and finally firewall.
    */
-  async firewallOperations(): Promise<NetworkFirewall.SyncStates | void> {
+  async firewallOperations(): Promise<Record<string, SyncState> | void> {
     let response;
     try {
       // update firewall name to unique firewall name
-      this.firewallObject.FirewallName = this.stringUtils.getUniqueResourceName(this.firewallObject.FirewallName);
+      this.firewallObject.FirewallName = this.stringUtils.getUniqueResourceName(this.firewallObject.FirewallName!);
       const firewallName = this.firewallObject.FirewallName;
       const firewallResponse = await this.service.describeFirewall(firewallName);
       if (firewallResponse && firewallResponse.Firewall) {
         Logger.log(LOG_LEVEL.INFO, `Updating existing firewall: ${firewallName}`);
-        const firewallPolicyArn = await this.firewallPolicyOperations(this.firewallObject.FirewallPolicyArn);
+        const firewallPolicyArn = await this.firewallPolicyOperations(this.firewallObject.FirewallPolicyArn!);
         Logger.log(LOG_LEVEL.INFO, `Checking Firewall Status: ${firewallPolicyArn}`);
         response = await this.checkFirewallStatus();
         await this.updateFirewall(firewallResponse, firewallPolicyArn);
       } else {
         Logger.log(LOG_LEVEL.INFO, `Firewall does not exist: ${firewallName}`);
         Logger.log(LOG_LEVEL.INFO, `Checking if firewall policy exist`);
-        const firewallPolicyArn = await this.firewallPolicyOperations(this.firewallObject.FirewallPolicyArn);
+        const firewallPolicyArn = await this.firewallPolicyOperations(this.firewallObject.FirewallPolicyArn!);
         Logger.log(LOG_LEVEL.INFO, `Creating Firewall: ${firewallName}`);
         response = await this.createNetworkFirewall(firewallPolicyArn);
       }
@@ -142,10 +159,10 @@ export class NetworkFirewallManager {
    * also waits until all the attachments created in each availability zone is also in IN_SYNC state.
    */
 
-  async checkFirewallStatus(): Promise<NetworkFirewall.SyncStates | undefined> {
+  async checkFirewallStatus(): Promise<Record<string, SyncState> | undefined> {
     let firewallStatus: string | undefined = '';
     let firewallConfigSyncState: string | undefined = '';
-    let syncStates: NetworkFirewall.SyncStates | undefined = {};
+    let syncStates: Record<string, SyncState> | undefined = {};
     let areAttachmentsInReadyStatus = false;
 
     do {
@@ -153,7 +170,7 @@ export class NetworkFirewallManager {
       await this.delay(Time.Seconds15);
       let attachmentStatus = [];
       //describe firewall
-      const firewallResponse = await this.service.describeFirewall(this.firewallObject.FirewallName);
+      const firewallResponse = await this.service.describeFirewall(this.firewallObject.FirewallName!);
       if (firewallResponse && firewallResponse.FirewallStatus) {
         firewallStatus = firewallResponse.FirewallStatus.Status;
         firewallConfigSyncState = firewallResponse.FirewallStatus.ConfigurationSyncStateSummary;
@@ -190,33 +207,37 @@ export class NetworkFirewallManager {
     let describePolicyResponse;
     try {
       Logger.log(LOG_LEVEL.INFO, `Getting Firewall Policy Object`);
-      const policyObject: NetworkFirewall.CreateFirewallPolicyRequest = await this.ruleGroupOperations(
+      const policyObject: CreateFirewallPolicyCommandInput = await this.ruleGroupOperations(
         this.fileHandler.convertFileToObject(policyPath)
       );
       // update policy name to unique policy name
-      policyObject.FirewallPolicyName = this.stringUtils.getUniqueResourceName(policyObject.FirewallPolicyName);
+      policyObject.FirewallPolicyName = this.stringUtils.getUniqueResourceName(policyObject.FirewallPolicyName!);
       Logger.log(LOG_LEVEL.INFO, `Checking if Firewall Policy exist: ${policyObject.FirewallPolicyName}`);
       Logger.log(LOG_LEVEL.INFO, `Found Firewall Policy, trying to update the policy.`);
       describePolicyResponse = await this.service.describeFirewallPolicy(policyObject.FirewallPolicyName);
       Logger.log(LOG_LEVEL.INFO, `Describe policy response`, describePolicyResponse);
-      if (describePolicyResponse && describePolicyResponse.FirewallPolicyResponse.FirewallPolicyArn) {
+      if (describePolicyResponse && describePolicyResponse.FirewallPolicyResponse!.FirewallPolicyArn) {
         describePolicyResponse.FirewallPolicy = policyObject.FirewallPolicy;
-        describePolicyResponse.FirewallPolicyResponse.Description = policyObject.Description;
-        describePolicyResponse.FirewallPolicyResponse.Tags = policyObject.Tags;
+        describePolicyResponse.FirewallPolicyResponse!.Description = policyObject.Description;
+        describePolicyResponse.FirewallPolicyResponse!.Tags = policyObject.Tags;
         let firewallPolicyUpdateResponse = await this.service.updateFirewallPolicy({
-          FirewallPolicyArn: describePolicyResponse.FirewallPolicyResponse.FirewallPolicyArn,
+          FirewallPolicyArn: describePolicyResponse.FirewallPolicyResponse!.FirewallPolicyArn,
           FirewallPolicy: policyObject.FirewallPolicy,
           UpdateToken: describePolicyResponse.UpdateToken,
           Description: policyObject.Description,
-          FirewallPolicyName: describePolicyResponse.FirewallPolicyResponse.FirewallPolicyName,
+          FirewallPolicyName: describePolicyResponse.FirewallPolicyResponse!.FirewallPolicyName,
         });
         Logger.log(LOG_LEVEL.INFO, `Firewall update policy response:`, firewallPolicyUpdateResponse);
         //delete the rule groups which are currently in the firewall  but not in the new firewall policy file
         await this.deleteRuleGroups(policyObject);
-        return describePolicyResponse.FirewallPolicyResponse.FirewallPolicyArn;
+        return describePolicyResponse.FirewallPolicyResponse!.FirewallPolicyArn;
       } else {
         Logger.log(LOG_LEVEL.INFO, `Firewall Policy does not exist,  trying to create the policy.`);
         const responseCreateFirewallPolicy = await this.service.createFirewallPolicy(policyObject);
+
+        if (!responseCreateFirewallPolicy.FirewallPolicyResponse?.FirewallPolicyArn) {
+          throw new Error('Failed to create firewall policy: No FirewallPolicyArn returned');
+        }
         return responseCreateFirewallPolicy.FirewallPolicyResponse.FirewallPolicyArn;
       }
     } catch (error: any) {
@@ -227,18 +248,18 @@ export class NetworkFirewallManager {
 
   /** Function to create/update Rule Groups with a back out feature in case there is a failure. */
   async ruleGroupOperations(
-    policyObject: NetworkFirewall.CreateFirewallPolicyRequest
-  ): Promise<NetworkFirewall.CreateFirewallPolicyRequest> {
+    policyObject: CreateFirewallPolicyCommandInput
+  ): Promise<CreateFirewallPolicyCommandInput> {
     Logger.log(LOG_LEVEL.INFO, `Checking rule groups found in the firewall policy`);
-    let statelessRuleGroupsForRollback: NetworkFirewall.DescribeRuleGroupResponse[] = [];
-    let statefulRuleGroupsForRollback: NetworkFirewall.DescribeRuleGroupResponse[] = [];
-    this.ruleGroupArnsInFirewall = await this.service.listRuleGroupsForPolicy(policyObject.FirewallPolicyName);
+    let statelessRuleGroupsForRollback: DescribeRuleGroupCommandOutput[] = [];
+    let statefulRuleGroupsForRollback: DescribeRuleGroupCommandOutput[] = [];
+    this.ruleGroupArnsInFirewall = await this.service.listRuleGroupsForPolicy(policyObject.FirewallPolicyName!);
 
     try {
-      if (policyObject.FirewallPolicy.StatelessRuleGroupReferences) {
+      if (policyObject.FirewallPolicy!.StatelessRuleGroupReferences) {
         await this.handleStatelessRuleGroupReferences(policyObject, statelessRuleGroupsForRollback);
       }
-      if (policyObject.FirewallPolicy.StatefulRuleGroupReferences) {
+      if (policyObject.FirewallPolicy!.StatefulRuleGroupReferences) {
         await this.handleStatefulRuleGroupReferences(policyObject, statefulRuleGroupsForRollback);
       }
     } catch (error: any) {
@@ -251,20 +272,20 @@ export class NetworkFirewallManager {
   }
 
   private async handleStatelessRuleGroupReferences(
-    policyObject: NetworkFirewall.CreateFirewallPolicyRequest,
-    statelessRuleGroupsForRollback: NetworkFirewall.DescribeRuleGroupResponse[]
+    policyObject: CreateFirewallPolicyCommandInput,
+    statelessRuleGroupsForRollback: DescribeRuleGroupCommandOutput[]
   ) {
-    if (!policyObject.FirewallPolicy.StatelessRuleGroupReferences) {
+    if (!policyObject.FirewallPolicy!.StatelessRuleGroupReferences) {
       return;
     }
 
-    for (let statelessRuleGroupReference of policyObject.FirewallPolicy.StatelessRuleGroupReferences) {
-      let statelessRuleGroupObject: NetworkFirewall.CreateRuleGroupRequest = await this.fileHandler.convertFileToObject(
-        statelessRuleGroupReference.ResourceArn
+    for (let statelessRuleGroupReference of policyObject.FirewallPolicy!.StatelessRuleGroupReferences) {
+      let statelessRuleGroupObject: CreateRuleGroupCommandInput = await this.fileHandler.convertFileToObject(
+        statelessRuleGroupReference.ResourceArn!
       );
       Logger.log(LOG_LEVEL.INFO, `Checking if stateless rule group exists: ${statelessRuleGroupObject.RuleGroupName}`);
       let describeRuleGroupResponse = await this.service.describeRuleGroup(
-        statelessRuleGroupObject.RuleGroupName,
+        statelessRuleGroupObject.RuleGroupName!,
         RuleGroupType.Stateless
       );
       Logger.log(LOG_LEVEL.INFO, `Describe Rule group response`, describeRuleGroupResponse);
@@ -275,10 +296,10 @@ export class NetworkFirewallManager {
           UpdateToken: describeRuleGroupResponse.UpdateToken,
           Description: statelessRuleGroupObject.Description,
           RuleGroup: statelessRuleGroupObject.RuleGroup,
-          RuleGroupArn: describeRuleGroupResponse.RuleGroupResponse.RuleGroupArn,
+          RuleGroupArn: describeRuleGroupResponse.RuleGroupResponse!.RuleGroupArn,
           Type: statelessRuleGroupObject.Type,
         });
-        statelessRuleGroupReference.ResourceArn = describeRuleGroupResponse.RuleGroupResponse.RuleGroupArn;
+        statelessRuleGroupReference.ResourceArn = describeRuleGroupResponse.RuleGroupResponse!.RuleGroupArn;
       } else {
         await this.createStatelessRuleGroup(statelessRuleGroupObject, statelessRuleGroupReference);
       }
@@ -286,33 +307,33 @@ export class NetworkFirewallManager {
   }
 
   private async createStatelessRuleGroup(
-    ruleGroupObject: NetworkFirewall.CreateRuleGroupRequest,
-    ruleGroupReference: NetworkFirewall.StatelessRuleGroupReference
+    ruleGroupObject: CreateRuleGroupCommandInput,
+    ruleGroupReference: StatelessRuleGroupReference
   ) {
     Logger.log(LOG_LEVEL.INFO, `Creating rule group: ${ruleGroupObject.RuleGroupName}`);
     let createRuleGroupResponse = await this.service.createRuleGroup(ruleGroupObject);
-    ruleGroupReference.ResourceArn = createRuleGroupResponse.RuleGroupResponse.RuleGroupArn;
+    ruleGroupReference.ResourceArn = createRuleGroupResponse.RuleGroupResponse!.RuleGroupArn;
     Logger.log(LOG_LEVEL.INFO, ruleGroupReference);
     Logger.log(LOG_LEVEL.INFO, `Create Rule group response`, createRuleGroupResponse);
   }
 
   private async handleStatefulRuleGroupReferences(
-    policyObject: NetworkFirewall.CreateFirewallPolicyRequest,
-    statefulRuleGroupsForRollback: NetworkFirewall.DescribeRuleGroupResponse[]
+    policyObject: CreateFirewallPolicyCommandInput,
+    statefulRuleGroupsForRollback: DescribeRuleGroupCommandOutput[]
   ) {
-    if (!policyObject.FirewallPolicy.StatefulRuleGroupReferences) {
+    if (!policyObject.FirewallPolicy!.StatefulRuleGroupReferences) {
       return;
     }
-    for (let statefulRuleGroupReference of policyObject.FirewallPolicy.StatefulRuleGroupReferences) {
-      let statefulRuleGroupObject: NetworkFirewall.CreateRuleGroupRequest = this.fileHandler.convertFileToObject(
-        statefulRuleGroupReference.ResourceArn
+    for (let statefulRuleGroupReference of policyObject.FirewallPolicy!.StatefulRuleGroupReferences) {
+      let statefulRuleGroupObject: CreateRuleGroupCommandInput = this.fileHandler.convertFileToObject(
+        statefulRuleGroupReference.ResourceArn!
       );
       if (statefulRuleGroupObject.Rules) {
         statefulRuleGroupObject.Rules = this.fileHandler.copyFileContentToString(statefulRuleGroupObject.Rules);
       }
       Logger.log(LOG_LEVEL.INFO, `Checking if stateful rule group exists: ${statefulRuleGroupObject.RuleGroupName}`);
       let describeRuleGroupResponse = await this.service.describeRuleGroup(
-        statefulRuleGroupObject.RuleGroupName,
+        statefulRuleGroupObject.RuleGroupName!,
         RuleGroupType.Stateful
       );
       Logger.log(LOG_LEVEL.INFO, `Describe Rule group response`, describeRuleGroupResponse);
@@ -323,7 +344,7 @@ export class NetworkFirewallManager {
           await this.service.updateRuleGroup({
             UpdateToken: describeRuleGroupResponse.UpdateToken,
             Description: statefulRuleGroupObject.Description,
-            RuleGroupArn: describeRuleGroupResponse.RuleGroupResponse.RuleGroupArn,
+            RuleGroupArn: describeRuleGroupResponse.RuleGroupResponse!.RuleGroupArn,
             Rules: statefulRuleGroupObject.Rules,
             Type: statefulRuleGroupObject.Type,
           });
@@ -332,12 +353,12 @@ export class NetworkFirewallManager {
             UpdateToken: describeRuleGroupResponse.UpdateToken,
             Description: statefulRuleGroupObject.Description,
             RuleGroup: statefulRuleGroupObject.RuleGroup,
-            RuleGroupArn: describeRuleGroupResponse.RuleGroupResponse.RuleGroupArn,
+            RuleGroupArn: describeRuleGroupResponse.RuleGroupResponse!.RuleGroupArn,
             Type: statefulRuleGroupObject.Type,
           });
         }
 
-        statefulRuleGroupReference.ResourceArn = describeRuleGroupResponse.RuleGroupResponse.RuleGroupArn;
+        statefulRuleGroupReference.ResourceArn = describeRuleGroupResponse.RuleGroupResponse!.RuleGroupArn;
         Logger.log(LOG_LEVEL.INFO, `Found existing stateful rule group, trying to update it.`);
       } else {
         await this.createStatefulRuleGroup(statefulRuleGroupObject, statefulRuleGroupReference);
@@ -346,19 +367,19 @@ export class NetworkFirewallManager {
   }
 
   private async createStatefulRuleGroup(
-    statefulRuleGroupObject: NetworkFirewall.CreateRuleGroupRequest,
-    statefulRuleGroupReference: NetworkFirewall.StatefulRuleGroupReference
+    statefulRuleGroupObject: CreateRuleGroupCommandInput,
+    statefulRuleGroupReference: StatefulRuleGroupReference
   ) {
     Logger.log(LOG_LEVEL.INFO, `Creating rule group`);
     let createRuleGroupResponse = await this.service.createRuleGroup(statefulRuleGroupObject);
-    statefulRuleGroupReference.ResourceArn = createRuleGroupResponse.RuleGroupResponse.RuleGroupArn;
+    statefulRuleGroupReference.ResourceArn = createRuleGroupResponse.RuleGroupResponse!.RuleGroupArn;
     Logger.log(LOG_LEVEL.INFO, statefulRuleGroupReference);
     Logger.log(LOG_LEVEL.INFO, `Create Rule group response`, createRuleGroupResponse);
   }
 
   private async rollbackRuleGroups(
-    statelessRuleGroupsForRollback: NetworkFirewall.DescribeRuleGroupResponse[],
-    statefulRuleGroupsForRollback: NetworkFirewall.DescribeRuleGroupResponse[]
+    statelessRuleGroupsForRollback: DescribeRuleGroupCommandOutput[],
+    statefulRuleGroupsForRollback: DescribeRuleGroupCommandOutput[]
   ) {
     for (let statelessRuleGroup of statelessRuleGroupsForRollback) {
       Logger.log(LOG_LEVEL.WARN, `Rolling back stateless rule group`, statelessRuleGroup);
@@ -377,19 +398,23 @@ export class NetworkFirewallManager {
    * solution then the rule group will not be deleted.
    * @param policyObject -- NetworkFirewall.CreateFirewallPolicyRequest
    */
-  async deleteRuleGroups(policyObject: NetworkFirewall.CreateFirewallPolicyRequest) {
+  async deleteRuleGroups(policyObject: CreateFirewallPolicyCommandInput) {
     await this.delay(Time.Seconds15);
     Logger.log(LOG_LEVEL.DEBUG, `The rule groups currently configured  in the firewall `, this.ruleGroupArnsInFirewall);
     //retrieve the rule groups in policy Object
     let ruleGroupsInFirewallPolicyFile: { [key: string]: string } = {};
-    if (policyObject.FirewallPolicy.StatefulRuleGroupReferences) {
-      for (let ruleGroup of policyObject.FirewallPolicy.StatefulRuleGroupReferences) {
-        ruleGroupsInFirewallPolicyFile[ruleGroup.ResourceArn] = ruleGroup.ResourceArn;
+    if (policyObject.FirewallPolicy!.StatefulRuleGroupReferences) {
+      for (let ruleGroup of policyObject.FirewallPolicy!.StatefulRuleGroupReferences) {
+        if (ruleGroup.ResourceArn) {
+          ruleGroupsInFirewallPolicyFile[ruleGroup.ResourceArn] = ruleGroup.ResourceArn;
+        }
       }
     }
-    if (policyObject.FirewallPolicy.StatelessRuleGroupReferences) {
-      for (let ruleGroup of policyObject.FirewallPolicy.StatelessRuleGroupReferences) {
-        ruleGroupsInFirewallPolicyFile[ruleGroup.ResourceArn] = ruleGroup.ResourceArn;
+    if (policyObject.FirewallPolicy!.StatelessRuleGroupReferences) {
+      for (let ruleGroup of policyObject.FirewallPolicy!.StatelessRuleGroupReferences) {
+        if (ruleGroup.ResourceArn) {
+          ruleGroupsInFirewallPolicyFile[ruleGroup.ResourceArn] = ruleGroup.ResourceArn;
+        }
       }
     }
 
@@ -421,26 +446,32 @@ export class NetworkFirewallManager {
     }
   }
 
-  async createLoggingConfigurations() {
-    let loggingConfiguration = [];
+  async createLoggingConfigurations(): Promise<LogDestinationConfig[]> {
+    const loggingConfiguration: LogDestinationConfig[] = [];
     Logger.log(LOG_LEVEL.INFO, this.envProps);
+    
     if (this.envProps.logType && this.envProps.logType.toUpperCase() === 'ENABLEBOTH') {
-      let alertConfig = {
-        LogType: LogType.alert,
-        LogDestinationType: '',
+      const alertConfig: LogDestinationConfig = {
+        LogType: NetworkFirewallLogType.ALERT,
+        LogDestinationType: undefined,
         LogDestination: {},
       };
-      let flowConfig = {
-        LogType: LogType.flow,
-        LogDestinationType: '',
+      const flowConfig: LogDestinationConfig = {
+        LogType: NetworkFirewallLogType.FLOW,
+        LogDestinationType: undefined,
         LogDestination: {},
       };
       loggingConfiguration.push(alertConfig);
       loggingConfiguration.push(flowConfig);
     } else {
-      let config = {
-        LogType: this.envProps.logType ? this.envProps.logType.toUpperCase() : LogType.alert,
-        LogDestinationType: '',
+      // Convert to proper LogDestinationConfig type
+      const logTypeValue = this.envProps.logType?.toUpperCase() === 'FLOW' 
+        ? NetworkFirewallLogType.FLOW 
+        : NetworkFirewallLogType.ALERT;
+      
+      const config: LogDestinationConfig = {
+        LogType: logTypeValue,
+        LogDestinationType: undefined,
         LogDestination: {},
       };
       loggingConfiguration.push(config);
@@ -449,16 +480,16 @@ export class NetworkFirewallManager {
     loggingConfiguration.forEach(config => {
       switch (this.envProps.logDestinationType?.toUpperCase()) {
         case 'S3':
-          config.LogDestinationType = 'S3';
+          config.LogDestinationType = LogDestinationType.S3;
           config.LogDestination = {
-            bucketName: this.envProps.logDestination,
+            bucketName: this.envProps.logDestination || '',
             prefix: config.LogType === LogType.alert ? 'alerts' : 'flow',
           };
           break;
         case 'CLOUDWATCHLOGS':
-          config.LogDestinationType = 'CloudWatchLogs';
+          config.LogDestinationType = LogDestinationType.CLOUDWATCH_LOGS;
           config.LogDestination = {
-            logGroup: this.envProps.logDestination,
+            logGroup: this.envProps.logDestination || '',
           };
           break;
       }
@@ -475,7 +506,7 @@ export class NetworkFirewallManager {
    * and the firewallPolicyArn parameter are not same.
    */
   async updateFirewall(
-    describeFirewallResponse: NetworkFirewall.Types.DescribeFirewallResponse,
+    describeFirewallResponse: DescribeFirewallCommandOutput,
     firewallPolicyArn: string
   ) {
     if (!describeFirewallResponse.Firewall) {
@@ -495,7 +526,7 @@ export class NetworkFirewallManager {
     await this.addTagsToFirewall(describeFirewallResponse);
   }
 
-  private async addTagsToFirewall(describeFirewallResponse: NetworkFirewall.DescribeFirewallResponse) {
+  private async addTagsToFirewall(describeFirewallResponse: DescribeFirewallCommandOutput) {
     if (this.firewallObject.Tags && describeFirewallResponse.Firewall?.FirewallArn) {
       const response = await this.service.tagResource({
         ResourceArn: describeFirewallResponse.Firewall.FirewallArn,
@@ -509,7 +540,7 @@ export class NetworkFirewallManager {
     }
   }
 
-  private async updateFirewallDeleteProtection(describeFirewallResponse: NetworkFirewall.DescribeFirewallResponse) {
+  private async updateFirewallDeleteProtection(describeFirewallResponse: DescribeFirewallCommandOutput) {
     if (describeFirewallResponse.Firewall?.DeleteProtection !== this.firewallObject.DeleteProtection) {
       const response = await this.service.updateFirewallDeleteProtection({
         FirewallName: this.firewallObject.FirewallName,
@@ -520,7 +551,7 @@ export class NetworkFirewallManager {
   }
 
   private async updateFirewallPolicyChangeProtection(
-    describeFirewallResponse: NetworkFirewall.DescribeFirewallResponse
+    describeFirewallResponse: DescribeFirewallCommandOutput
   ) {
     if (
       describeFirewallResponse.Firewall?.FirewallPolicyChangeProtection !==
@@ -536,7 +567,7 @@ export class NetworkFirewallManager {
     }
   }
 
-  private async updateSubnetChangeProtection(describeFirewallResponse: NetworkFirewall.DescribeFirewallResponse) {
+  private async updateSubnetChangeProtection(describeFirewallResponse: DescribeFirewallCommandOutput) {
     if (describeFirewallResponse.Firewall?.SubnetChangeProtection !== this.firewallObject.SubnetChangeProtection) {
       const response = await this.service.updateSubnetChangeProtection({
         FirewallName: this.firewallObject.FirewallName,
@@ -548,7 +579,7 @@ export class NetworkFirewallManager {
     }
   }
 
-  private async updateFirewallDescription(describeFirewallResponse: NetworkFirewall.DescribeFirewallResponse) {
+  private async updateFirewallDescription(describeFirewallResponse: DescribeFirewallCommandOutput) {
     if (describeFirewallResponse.Firewall?.Description !== this.firewallObject.Description) {
       const response = await this.service.updateFirewallDescription({
         Description: this.firewallObject.Description,
@@ -559,7 +590,7 @@ export class NetworkFirewallManager {
   }
 
   private async associateFirewallPolicyArn(
-    describeFirewallResponse: NetworkFirewall.DescribeFirewallResponse,
+    describeFirewallResponse: DescribeFirewallCommandOutput,
     firewallPolicyArn: string
   ) {
     if (describeFirewallResponse.Firewall?.FirewallPolicyArn !== firewallPolicyArn) {

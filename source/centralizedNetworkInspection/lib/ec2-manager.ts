@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { EC2, NetworkFirewall } from 'aws-sdk';
+import { ApplianceModeSupportValue, RouteTable } from '@aws-sdk/client-ec2';
+import { SyncState } from '@aws-sdk/client-network-firewall';
 import { Ec2Service } from './service/ec2-service';
 import { LOG_LEVEL, Logger } from './common/logger';
 
@@ -31,7 +32,7 @@ export class Ec2Manager {
   private service: Ec2Service;
   private vpcEndpoint: string | undefined;
 
-  constructor(public envProps: Ec2EnvironmentProps[], public firewallSyncStates: NetworkFirewall.SyncStates) {
+  constructor(public envProps: Ec2EnvironmentProps[], public firewallSyncStates: Record<string, SyncState>) {
     this.service = new Ec2Service();
   }
 
@@ -111,7 +112,7 @@ export class Ec2Manager {
    * @return List of VPC Endpoint ids in ready state. Returns empty list if
    * route already exists.
    */
-  async checkExistingRoutes(routeTable: EC2.RouteTable): Promise<boolean> {
+  async checkExistingRoutes(routeTable: RouteTable): Promise<boolean> {
     const routes = routeTable.Routes;
     Logger.log(LOG_LEVEL.DEBUG, `print routes`);
     Logger.log(LOG_LEVEL.DEBUG, routes);
@@ -155,7 +156,10 @@ export class Ec2Manager {
    * @param transitGatewayAttachmentId
    * @param applianceMode
    */
-  static async updateTransitGatewayAttachementApplianceMode(transitGatewayAttachmentId: string, applianceMode: string) {
+  static async updateTransitGatewayAttachementApplianceMode(
+    transitGatewayAttachmentId: string, 
+    applianceMode: ApplianceModeSupportValue
+  ) {
     if (transitGatewayAttachmentId && applianceMode) {
       const response = await new Ec2Service().modifyTransitGatewayAttachment({
         TransitGatewayAttachmentId: transitGatewayAttachmentId,

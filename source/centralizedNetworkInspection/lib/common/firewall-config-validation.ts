@@ -2,8 +2,13 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  CreateFirewallCommandInput,
+  CreateFirewallPolicyCommandInput,
+  CreateRuleGroupCommandInput,
+  NetworkFirewall,
+} from '@aws-sdk/client-network-firewall';
 
-import { NetworkFirewall } from 'aws-sdk';
 import { Logger, LOG_LEVEL } from './logger';
 import { ConfigReader, ConfigPath } from './configReader/config-reader';
 import { MetricsManager, NetworkFirewallMetrics } from './send-metrics';
@@ -15,7 +20,7 @@ interface InvalidConfigFiles {
 }
 
 export class FirewallConfigValidation {
-  private invalidFiles: InvalidConfigFiles[];
+  private readonly invalidFiles: InvalidConfigFiles[];
   private service: NetworkFirewall;
   private fileHandler: ConfigReader;
 
@@ -71,24 +76,23 @@ export class FirewallConfigValidation {
 
   private async validateFirewallFile(firewallFile: string, metrics: NetworkFirewallMetrics) {
     Logger.log(LOG_LEVEL.INFO, `Validating the file paths for the firewall file named: ${firewallFile}`);
-    let firewall: NetworkFirewall.Types.CreateFirewallRequest = this.fileHandler.convertFileToObject(firewallFile);
+    let firewall: CreateFirewallCommandInput = this.fileHandler.convertFileToObject(firewallFile);
 
     this.validateFirewallFileNameAndArn(firewall);
 
-    let firewallPolicy: NetworkFirewall.Types.CreateFirewallPolicyRequest;
+    let firewallPolicy: CreateFirewallPolicyCommandInput;
 
-    //verify firewall policy.
     try {
-      firewallPolicy = this.fileHandler.convertFileToObject(firewall.FirewallPolicyArn);
+      firewallPolicy = this.fileHandler.convertFileToObject(firewall.FirewallPolicyArn!);
       metrics.numberOfPolicies += 1;
-      await this.validateFirewallPolicyFile(firewallPolicy, firewall.FirewallPolicyArn);
+      await this.validateFirewallPolicyFile(firewallPolicy, firewall.FirewallPolicyArn!);
 
       await this.validateFirewallPolicyStatefulRuleGroups(firewallPolicy, metrics, firewall);
       await this.validateFirewallPolicyStatelessRuleGroups(firewallPolicy, metrics, firewall);
     } catch (error) {
       Logger.log(LOG_LEVEL.INFO, `Failed to validate the firewall policy`);
       this.invalidFiles.push({
-        path: firewall.FirewallPolicyArn,
+        path: firewall.FirewallPolicyArn || '[unknown policy]',
         referencedInFile: firewall.FirewallPolicyArn,
         error: 'The file in the attribute path is not available in the configuration.',
       });
@@ -96,33 +100,33 @@ export class FirewallConfigValidation {
   }
 
   private async validateFirewallPolicyStatefulRuleGroups(
-    firewallPolicy: NetworkFirewall.CreateFirewallPolicyRequest,
+    firewallPolicy: CreateFirewallPolicyCommandInput,
     metrics: NetworkFirewallMetrics,
-    firewall: NetworkFirewall.CreateFirewallRequest
+    firewall: CreateFirewallCommandInput
   ) {
-    if (!firewallPolicy.FirewallPolicy.StatefulRuleGroupReferences) {
+    if (!firewallPolicy.FirewallPolicy!.StatefulRuleGroupReferences) {
       return;
     }
 
-    metrics.numberOfStatefulRuleGroups += firewallPolicy.FirewallPolicy.StatefulRuleGroupReferences.length;
+    metrics.numberOfStatefulRuleGroups += firewallPolicy.FirewallPolicy!.StatefulRuleGroupReferences.length;
     Logger.log(
       LOG_LEVEL.DEBUG,
       `Firewall Policy StatefulRuleGroupReferences`,
-      firewallPolicy.FirewallPolicy.StatefulRuleGroupReferences
+      firewallPolicy.FirewallPolicy!.StatefulRuleGroupReferences
     );
-    for (let statefulRuleGroup of firewallPolicy.FirewallPolicy.StatefulRuleGroupReferences) {
+    for (let statefulRuleGroup of firewallPolicy.FirewallPolicy!.StatefulRuleGroupReferences) {
       try {
-        const ruleGroup: NetworkFirewall.Types.CreateRuleGroupRequest = this.fileHandler.convertFileToObject(
-          statefulRuleGroup.ResourceArn
+        const ruleGroup: CreateRuleGroupCommandInput = this.fileHandler.convertFileToObject(
+          statefulRuleGroup.ResourceArn!
         );
         if (ruleGroup.Rules) {
           metrics.numberOfSuricataRules += 1;
         }
-        await this.validateRuleGroupFile(ruleGroup, statefulRuleGroup.ResourceArn);
+        await this.validateRuleGroupFile(ruleGroup, statefulRuleGroup.ResourceArn!);
       } catch (error) {
         this.invalidFiles.push({
-          path: statefulRuleGroup.ResourceArn,
-          referencedInFile: firewall.FirewallPolicyArn,
+          path: statefulRuleGroup.ResourceArn || '[unknown rule group]',
+          referencedInFile: firewall.FirewallPolicyArn || '[unknown policy]',
           error: 'The file in the attribute path is not available in the configuration.',
         });
       }
@@ -130,28 +134,28 @@ export class FirewallConfigValidation {
   }
 
   private async validateFirewallPolicyStatelessRuleGroups(
-    firewallPolicy: NetworkFirewall.CreateFirewallPolicyRequest,
+    firewallPolicy: CreateFirewallPolicyCommandInput,
     metrics: NetworkFirewallMetrics,
-    firewall: NetworkFirewall.CreateFirewallRequest
+    firewall: CreateFirewallCommandInput
   ) {
-    if (!firewallPolicy.FirewallPolicy.StatelessRuleGroupReferences) {
+    if (!firewallPolicy.FirewallPolicy!.StatelessRuleGroupReferences) {
       return;
     }
 
-    metrics.numberOfStatelessRuleGroups += firewallPolicy.FirewallPolicy.StatelessRuleGroupReferences.length;
+    metrics.numberOfStatelessRuleGroups += firewallPolicy.FirewallPolicy!.StatelessRuleGroupReferences.length;
     Logger.log(
       LOG_LEVEL.DEBUG,
       `Firewall Policy StatelessRuleGroupReferences`,
-      firewallPolicy.FirewallPolicy.StatelessRuleGroupReferences
+      firewallPolicy.FirewallPolicy!.StatelessRuleGroupReferences
     );
-    for (let statelessRuleGroup of firewallPolicy.FirewallPolicy.StatelessRuleGroupReferences) {
+    for (let statelessRuleGroup of firewallPolicy.FirewallPolicy!.StatelessRuleGroupReferences) {
       try {
-        const ruleGroup = this.fileHandler.convertFileToObject(statelessRuleGroup.ResourceArn);
-        await this.validateRuleGroupFile(ruleGroup, statelessRuleGroup.ResourceArn);
+        const ruleGroup = this.fileHandler.convertFileToObject(statelessRuleGroup.ResourceArn!);
+        await this.validateRuleGroupFile(ruleGroup, statelessRuleGroup.ResourceArn!);
       } catch (error) {
         this.invalidFiles.push({
-          path: statelessRuleGroup.ResourceArn,
-          referencedInFile: firewall.FirewallPolicyArn,
+          path: statelessRuleGroup.ResourceArn || '[unknown rule group]',
+          referencedInFile: firewall.FirewallPolicyArn || '[unknown policy]',
           error: 'The file in the attribute path is not available in the configuration.',
         });
       }
@@ -172,11 +176,11 @@ export class FirewallConfigValidation {
     }
   }
 
-  async validateFirewallPolicyFile(firewallPolicy: NetworkFirewall.Types.CreateFirewallPolicyRequest, path: string) {
+  async validateFirewallPolicyFile(firewallPolicy: CreateFirewallPolicyCommandInput, path: string) {
     firewallPolicy.DryRun = true;
     let response;
     try {
-      response = await this.service.createFirewallPolicy(firewallPolicy).promise();
+      response = await this.service.createFirewallPolicy(firewallPolicy);
     } catch (error: any) {
       const errorCode: string = error['code'];
       Logger.log(LOG_LEVEL.DEBUG, `Error response from the create firewall policy dry run API`, error);
@@ -190,7 +194,7 @@ export class FirewallConfigValidation {
     Logger.log(LOG_LEVEL.DEBUG, `Response from the create firewall policy dry run API`, response);
   }
 
-  async validateRuleGroupFile(ruleGroup: NetworkFirewall.Types.CreateRuleGroupRequest, path: string) {
+  async validateRuleGroupFile(ruleGroup: CreateRuleGroupCommandInput, path: string) {
     //add code to check if this rule source is provided or rules file is being provided
     if (ruleGroup.Rules && ruleGroup.RuleGroup) {
       Logger.log(LOG_LEVEL.DEBUG, `Rule Group file has both Rules and RuleGroup fields.`, ruleGroup);
@@ -215,7 +219,7 @@ export class FirewallConfigValidation {
     ruleGroup.DryRun = true;
     let response;
     try {
-      response = await this.service.createRuleGroup(ruleGroup).promise();
+      response = await this.service.createRuleGroup(ruleGroup);
     } catch (error: any) {
       Logger.log(LOG_LEVEL.DEBUG, `Error response from the create rule group dry run API`, error);
       const errorCode: string = error['code'];
@@ -229,12 +233,30 @@ export class FirewallConfigValidation {
     Logger.log(LOG_LEVEL.DEBUG, `Response from the create rule group dry run API`, response);
   }
 
-  validateFirewallFileNameAndArn(firewall: NetworkFirewall.Types.CreateFirewallRequest) {
-    if (!firewall.FirewallName || !firewall.FirewallPolicyArn) {
+  validateFirewallFileNameAndArn(firewall: CreateFirewallCommandInput) {
+    if (!firewall.FirewallName && !firewall.FirewallPolicyArn) {
+      this.invalidFiles.push({
+        path: '[unknown firewall]',
+        referencedInFile: '[unknown firewall]',
+        error: 'FirewallName and FirewallPolicyArn are both required in the firewall.',
+      });
+      return;
+    }
+
+    if (!firewall.FirewallName) {
+      this.invalidFiles.push({
+        path: '[unnamed firewall]',
+        referencedInFile: firewall.FirewallPolicyArn || '[unknown]',
+        error: 'FirewallName is required in the firewall.',
+      });
+      return;
+    }
+
+    if (!firewall.FirewallPolicyArn) {
       this.invalidFiles.push({
         path: firewall.FirewallName,
         referencedInFile: firewall.FirewallName,
-        error: 'FirewallName and FirewallPolicyArn are required in the firewall.',
+        error: 'FirewallPolicyArn is required in the firewall.',
       });
     }
   }

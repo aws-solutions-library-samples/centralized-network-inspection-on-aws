@@ -5,25 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.2] - 2025-03
+## [1.1.3] - 2025-06-23
+
+### Changed
+
+- Library updates to address [cve-2025-23206](https://avd.aquasec.com/nvd/2025/cve-2025-23206/)
+- Library updates to address [cve-2025-27789](https://avd.aquasec.com/nvd/2025/cve-2025-27789/)
+- Javascript SDK migration v2 to v3
+- Node js update to 22
+
+### Added
+
+- Add cdk-solution-helper, responsible for converting standard 'cdk synth' output into solution assets.
+
+## [1.1.2] - 2025-03-14
 
 ### Changed
 
 - Library updates to address [Possible SSRF and Credential Leakage via Absolute URL in axios Requests](https://avd.aquasec.com/nvd/cve-2025-27152)
 
-## [1.1.1] - 2024-11
+## [1.1.1] - 2024-11-21
 
 ### Changed
 
 - Library updates to address [Regular Expression Denial of Service (ReDoS) in cross-spawn](https://avd.aquasec.com/nvd/cve-2024-21538)
 
-## [1.1.0] - 2024-10
+## [1.1.0] - 2024-10-24
 
 ### Changed
 
 - Replacing CodeCommit with S3 bucket as source code respository for network firewall configurations.
 
-## [1.0.8] - 2024-09
+## [1.0.8] - 2024-09-15
 
 ### Changed
 
@@ -31,20 +44,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Library updates to address [AWS CDK RestApi not generating authorizationScope correctly in resultant CFN template](https://avd.aquasec.com/nvd/cve-2024-45037)
 - Library updates to address [micromatch: vulnerable to Regular Expression Denial of Service](https://avd.aquasec.com/nvd/cve-2024-4067)
 
-## [1.0.7] - 2024-08
+## [1.0.7] - 2024-08-22
 
 ### Changed
 
 - Library updates to address [axios 1.7.2 allows SSRF via unexpected behavior where requests for path relative URLs get processed as protocol relative URLs.](https://avd.aquasec.com/nvd/cve-2024-39338)
 
-## [1.0.6] - 2024-07
+## [1.0.6] - 2024-07-15
 
 ### Changed
 
 - Bump up minor versions of dependencies
 - Library updates to address [braces: fails to limit the number of characters it can handle]( https://avd.aquasec.com/nvd/cve-2024-4068)
 
-## [1.0.5] - 2024-05
+## [1.0.5] - 2024-05-22
 
 ### Changed
 
