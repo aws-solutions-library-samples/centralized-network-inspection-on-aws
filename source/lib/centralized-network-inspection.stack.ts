@@ -641,7 +641,7 @@ export class CentralizedNetworkInspectionStack extends Stack {
         phases: {
           install: {
             'runtime-versions': {
-              nodejs: '18',
+              nodejs: '22',
             },
             commands: [`export current=$(pwd)`, `export sourceCodeKey=$CODE_BUILD_SOURCE_CODE_S3_KEY`],
           },
@@ -900,7 +900,7 @@ export class CentralizedNetworkInspectionStack extends Stack {
         phases: {
           install: {
             'runtime-versions': {
-              nodejs: '18',
+              nodejs: '22',
             },
             commands: [`export current=$(pwd)`, `export sourceCodeKey=$CODE_BUILD_SOURCE_CODE_S3_KEY`],
           },

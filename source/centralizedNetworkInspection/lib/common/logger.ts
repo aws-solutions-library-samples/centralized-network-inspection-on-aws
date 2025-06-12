@@ -20,7 +20,7 @@ export class Logger {
     if (log_level <= this.CONFIGURED_LOG_LEVEL) {
       let currentDateTime = new Date();
       let formatted_date = `${currentDateTime.getFullYear()}-${
-        currentDateTime.getMinutes() - 1
+        currentDateTime.getMonth() + 1
       }-${currentDateTime.getDate()} ${currentDateTime.getHours()}:${currentDateTime.getMinutes()}:${currentDateTime.getSeconds()}`;
       let log_message = `${formatted_date} : ${JSON.stringify(message, null, 2)}`;
       if (object) {

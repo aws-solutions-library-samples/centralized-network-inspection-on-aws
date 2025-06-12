@@ -4,6 +4,7 @@
  */
 
 import { Ec2Manager } from '../lib/ec2-manager';
+import { SyncState, AttachmentStatus } from '@aws-sdk/client-network-firewall';
 
 const ec2EnvProps = [
   {
@@ -15,17 +16,6 @@ const ec2EnvProps = [
     availabilityZone: 'us-east-1b',
   },
 ];
-
-jest.mock(
-  'aws-sdk',
-  () => {
-    return {
-      __esModule: true,
-      EC2: jest.fn().mockReturnValue({}),
-    };
-  },
-  { virtual: true }
-);
 
 jest.mock(
   '../lib/service/ec2-service',
@@ -73,6 +63,16 @@ jest.mock(
             Return: true,
           };
         }),
+        modifyTransitGatewayAttachment: jest.fn().mockImplementation(() => {
+          return Promise.resolve({
+            TransitGatewayVpcAttachment: {
+              TransitGatewayAttachmentId: 'tgw-attach-test',
+              Options: {
+                ApplianceModeSupport: 'enable'
+              }
+            }
+          });
+        }),
       }),
     };
   },
@@ -80,12 +80,12 @@ jest.mock(
 );
 
 test('test the method routeTableOperations - 2 VPCE', async () => {
-  const syncStates = {
+  const syncStates: Record<string, SyncState> = {
     'us-east-1a': {
       Attachment: {
         SubnetId: 'subnet-1',
         EndpointId: 'vpce-1',
-        Status: 'READY',
+        Status: AttachmentStatus.READY,
       },
       Config: {
         'arn:aws:network-firewall:us-east-1:1234:firewall-policy/Firewall-Policy-1': { SyncStatus: 'IN_SYNC' },
@@ -98,7 +98,7 @@ test('test the method routeTableOperations - 2 VPCE', async () => {
       Attachment: {
         SubnetId: 'subnet-2',
         EndpointId: 'vpce-2',
-        Status: 'READY',
+        Status: AttachmentStatus.READY,
       },
       Config: {
         'arn:aws:network-firewall:us-east-1:1234:firewall-policy/Firewall-Policy-1': { SyncStatus: 'IN_SYNC' },

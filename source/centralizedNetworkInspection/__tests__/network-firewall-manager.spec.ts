@@ -7,17 +7,6 @@ import { NetworkFirewallManager } from '../lib/network-firewall-manager';
 import { ConfigReader } from '../lib/common/configReader/config-reader';
 
 jest.mock(
-  'aws-sdk',
-  () => {
-    return {
-      __esModule: true,
-      NetworkFirewall: jest.fn().mockReturnValue({}),
-    };
-  },
-  { virtual: true }
-);
-
-jest.mock(
   '../lib/service/network-firewall-service',
   () => {
     return {
@@ -789,6 +778,12 @@ test('Update firewall properties', async () => {
         FirewallPolicyChangeProtection: false,
         SubnetChangeProtection: false,
       },
+      $metadata: {
+        httpStatusCode: 200,
+        requestId: 'test-request-id',
+        attempts: 1,
+        totalRetryDelay: 0
+      }
     },
     'arn:aws:network-firewall:us-east-1:1234:firewall-policy/Firewall-Policy-1'
   );

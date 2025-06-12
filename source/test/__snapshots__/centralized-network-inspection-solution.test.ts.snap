@@ -336,7 +336,7 @@ exports[`Centralized Network Inspection on AWS centralizedNetworkInspectionStack
       "Properties": {
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-1234-eu-west-1",
-          "S3Key": "4cd2f2411231aa073e609dc99a49b5c5e974252bf9abf0f9350d237d17cce8be.zip",
+          "S3Key": "9d043014be736e8162bcc7ec5590cc6d2ff24fd0d9c73a5c5d595151c5fdad00.zip",
         },
         "Handler": "index.handler",
         "Role": {
@@ -345,7 +345,7 @@ exports[`Centralized Network Inspection on AWS centralizedNetworkInspectionStack
             "Arn",
           ],
         },
-        "Runtime": "nodejs20.x",
+        "Runtime": "nodejs22.x",
         "Timeout": 120,
       },
       "Type": "AWS::Lambda::Function",
@@ -645,7 +645,7 @@ exports[`Centralized Network Inspection on AWS centralizedNetworkInspectionStack
   "phases": {
     "install": {
       "runtime-versions": {
-        "nodejs": "18"
+        "nodejs": "22"
       },
       "commands": [
         "export current=$(pwd)",
@@ -1172,15 +1172,9 @@ exports[`Centralized Network Inspection on AWS centralizedNetworkInspectionStack
               "Effect": "Allow",
               "Principal": {
                 "AWS": {
-                  "Fn::Join": [
-                    "",
-                    [
-                      "arn:",
-                      {
-                        "Ref": "AWS::Partition",
-                      },
-                      ":iam::1234:root",
-                    ],
+                  "Fn::GetAtt": [
+                    "CentralizedNetworkInspectionCodePipelineRoleAB1E4DBC",
+                    "Arn",
                   ],
                 },
               },
@@ -1346,15 +1340,9 @@ exports[`Centralized Network Inspection on AWS centralizedNetworkInspectionStack
               "Effect": "Allow",
               "Principal": {
                 "AWS": {
-                  "Fn::Join": [
-                    "",
-                    [
-                      "arn:",
-                      {
-                        "Ref": "AWS::Partition",
-                      },
-                      ":iam::1234:root",
-                    ],
+                  "Fn::GetAtt": [
+                    "CentralizedNetworkInspectionCodePipelineRoleAB1E4DBC",
+                    "Arn",
                   ],
                 },
               },
@@ -1484,15 +1472,9 @@ exports[`Centralized Network Inspection on AWS centralizedNetworkInspectionStack
               "Effect": "Allow",
               "Principal": {
                 "AWS": {
-                  "Fn::Join": [
-                    "",
-                    [
-                      "arn:",
-                      {
-                        "Ref": "AWS::Partition",
-                      },
-                      ":iam::1234:root",
-                    ],
+                  "Fn::GetAtt": [
+                    "CentralizedNetworkInspectionCodePipelineRoleAB1E4DBC",
+                    "Arn",
                   ],
                 },
               },
@@ -2079,7 +2061,7 @@ exports[`Centralized Network Inspection on AWS centralizedNetworkInspectionStack
   "phases": {
     "install": {
       "runtime-versions": {
-        "nodejs": "18"
+        "nodejs": "22"
       },
       "commands": [
         "export current=$(pwd)",
